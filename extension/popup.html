@@ -61,6 +61,16 @@
       background-color: #0099CC;
     }
     
+    .tab-info {
+      font-size: 12px;
+      color: #AAA;
+      margin-top: 5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 280px;
+    }
+    
     .footer {
       margin-top: 15px;
       font-size: 12px;
@@ -79,6 +89,7 @@
       <span id="statusIndicator" class="status-indicator status-inactive"></span>
       <span id="statusText">Inactive</span>
     </p>
+    <p id="capturedTabInfo" class="tab-info" style="display: none;"></p>
   </div>
   
   <div class="controls">

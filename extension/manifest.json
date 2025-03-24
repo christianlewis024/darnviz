@@ -5,7 +5,11 @@
   "description": "Captures audio from browser tabs for the DarnViz music visualizer",
   "permissions": [
     "tabCapture",
-    "activeTab"
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -18,6 +22,12 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:3000/*", "https://darnviz.example.com/*"],
+      "js": ["content.js"]
+    }
+  ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
