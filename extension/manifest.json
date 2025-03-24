@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "DarnViz Audio Capturer",
+  "version": "0.1.0",
+  "description": "Captures audio from browser tabs for the DarnViz music visualizer",
+  "permissions": [
+    "tabCapture",
+    "activeTab"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
