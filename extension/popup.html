@@ -46,6 +46,10 @@
       background-color: #52c41a;
     }
     
+    .status-value.error {
+      color: #ff4d4f;
+    }
+    
     button {
       background-color: #00CCFF;
       color: white;
@@ -61,6 +65,11 @@
       background-color: #0099CC;
     }
     
+    button:disabled {
+      background-color: #555;
+      cursor: not-allowed;
+    }
+    
     .tab-info {
       font-size: 12px;
       color: #AAA;
@@ -71,10 +80,56 @@
       max-width: 280px;
     }
     
-    .footer {
-      margin-top: 15px;
+    .workflow-steps {
+      margin-top: 20px;
+    }
+    
+    .step {
+      display: flex;
+      margin-bottom: 15px;
+      align-items: flex-start;
+    }
+    
+    .step-number {
+      background-color: #00CCFF;
+      color: white;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+    
+    .step-content {
+      flex: 1;
+    }
+    
+    .step-instruction {
       font-size: 12px;
-      color: #888;
+      color: #AAA;
+      margin: 5px 0 10px;
+    }
+    
+    .step.active .step-number {
+      background-color: #0099CC;
+    }
+    
+    .step.completed .step-number {
+      background-color: #52c41a;
+    }
+    
+    .demo-message {
+      margin-top: 15px;
+      padding: 8px;
+      background-color: rgba(255, 204, 0, 0.2);
+      border-radius: 4px;
+      font-size: 13px;
+      border-left: 3px solid #FFCC00;
+      text-align: center;
     }
   </style>
 </head>
@@ -92,14 +147,31 @@
     <p id="capturedTabInfo" class="tab-info" style="display: none;"></p>
   </div>
   
-  <div class="controls">
-    <button id="startCapture">Start Capture</button>
-    <button id="stopCapture" disabled>Stop Capture</button>
-  </div>
-  
-  <div class="footer">
-    <p>Capture audio from this tab to visualize in DarnViz</p>
-    <p><a href="#" id="openVisualizer">Open Visualizer</a></p>
+  <div class="workflow-steps">
+    <div class="step" id="step1">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <strong>Navigate to a tab with audio</strong>
+        <p class="step-instruction">Go to YouTube, Spotify, or any tab playing audio</p>
+      </div>
+    </div>
+    
+    <div class="step" id="step2">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <strong>Capture audio from this tab</strong>
+        <button id="startCapture">Start Capture</button>
+        <button id="stopCapture" disabled>Stop Capture</button>
+      </div>
+    </div>
+    
+    <div class="step" id="step3">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <strong>Open visualizer in a new tab</strong>
+        <p><a href="#" id="openVisualizer">Open Visualizer</a></p>
+      </div>
+    </div>
   </div>
   
   <script src="popup.js"></script>

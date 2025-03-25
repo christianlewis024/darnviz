@@ -1,0 +1,222 @@
+/* Visualization Manager Styles */
+.visualization-manager {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.visualization-container {
+  position: relative;
+  width: 100%;
+  height: calc(100% - 60px); /* Leave space for controls */
+  transition: opacity 0.5s ease;
+  overflow: hidden;
+}
+
+.visualization-container.transitioning {
+  opacity: 0.2;
+}
+
+.visualization-selector {
+  margin-top: 15px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.viz-button {
+  padding: 8px 15px;
+  border-radius: 20px;
+  border: 2px solid;
+  background-color: transparent;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.viz-button:hover {
+  transform: scale(1.05);
+}
+
+.viz-button.active {
+  transform: scale(1.1);
+}
+.darnviz-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.app-header {
+  padding: 20px;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.app-footer {
+  padding: 10px;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.visualization-container {
+  width: 90%;
+  max-width: 1200px;
+  height: 70vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.visualization-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.waveform-visualization {
+  width: 100%;
+  height: 100%;
+}
+
+.control-button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-button:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+.debug-info {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 0.8rem;
+  text-align: left;
+  opacity: 0.7;
+}
+
+.extension-check {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 30px;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.extension-check.checking .loading-spinner {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  margin: 20px;
+  border: 4px solid;
+  border-radius: 50%;
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.extension-instructions {
+  margin: 20px 0;
+  text-align: left;
+}
+
+.extension-instructions h3 {
+  margin: 20px 0 10px;
+  color: #00CCFF;
+}
+
+.install-instructions {
+  text-align: left;
+  margin: 15px auto;
+  padding-left: 20px;
+}
+
+.install-instructions li {
+  margin-bottom: 10px;
+}
+
+.install-instructions code {
+  background-color: rgba(0, 0, 0, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.install-extension-button {
+  background-color: #00CCFF;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  margin-top: 20px;
+}
+
+.install-extension-button:hover {
+  opacity: 0.9;
+}
+
+/* New styles for the instruction panel */
+.instruction-panel {
+  max-width: 600px;
+  padding: 20px;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.05);
+  text-align: left;
+  margin: 20px;
+}
+
+.instruction-panel h3 {
+  margin-top: 0;
+  text-align: center;
+}
+
+.instruction-panel ol {
+  margin: 20px 0;
+  padding-left: 20px;
+}
+
+.instruction-panel li {
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.instruction-panel .note {
+  font-style: italic;
+  margin-top: 20px;
+  padding: 10px;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-left: 3px solid #00CCFF;
+  border-radius: 3px;
+}

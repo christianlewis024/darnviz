@@ -1,16 +1,18 @@
-// Background script for DarnViz extension - Phase 1 implementation
+// Background script for DarnViz extension - Phase 2 implementation
+
+// Always use demo mode initially until real audio capture is working
+let demoMode = true;
+let visualizerTabId = null;  // Tab ID where visualizations are displayed
 let isCapturing = false;
-let captureStream = null;
-let audioContext = null;
-let analyser = null;
-let activeTabId = null;
+let dataInterval = null;
 
 // Listen for messages from popup or content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Background script received message:', message);
   
   if (message.action === 'startCapture') {
-    startAudioCapture(sendResponse);
+    console.log('Starting capture in demo mode');
+    startDemoAudioCapture(sendResponse);
     // Must return true for asynchronous response
     return true;
   }
@@ -21,12 +23,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   else if (message.action === 'getStatus') {
     sendResponse({ 
       isCapturing,
-      activeTabId
+      visualizerTabId,
+      demoMode
     });
   }
-  else if (message.action === 'getAudioData') {
-    // This will be used to send audio data to the web app
-    sendAudioData(sendResponse);
+  else if (message.action === 'openVisualizer') {
+    openVisualizerTab(sendResponse);
+    return true;
+  }
+  else if (message.action === 'webAppReadyForData') {
+    // The web app tab is ready to receive audio data
+    console.log('Web app is ready to receive audio data', message);
+    
+    // Store the web app tab ID
+    const receiverTabId = sender.tab ? sender.tab.id : null;
+    visualizerTabId = receiverTabId;
+    
+    chrome.storage.local.set({ visualizerTabId: receiverTabId }, function() {
+      console.log('Visualizer tab ID set:', receiverTabId);
+      
+      // If we're already capturing, start sending data to this tab
+      if (isCapturing && receiverTabId) {
+        try {
+          chrome.tabs.sendMessage(receiverTabId, {
+            type: 'DARNVIZ_CAPTURE_STATUS',
+            isCapturing: true,
+            demoMode: demoMode
+          });
+          
+          // If no data interval is running, start it
+          if (!dataInterval) {
+            startAudioDataInterval();
+          }
+        } catch (error) {
+          console.error('Error sending capture status:', error);
+        }
+      }
+      
+      sendResponse({ success: true });
+    });
     return true;
   }
   
@@ -35,146 +70,161 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Start audio capture from the current tab
- * @param {function} sendResponse - Callback function to send response to sender
+ * Open the visualizer tab
  */
-async function startAudioCapture(sendResponse) {
-  try {
-    // Get the current active tab
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    if (!tabs || tabs.length === 0) {
-      console.error('No active tab found');
-      sendResponse({ success: false, error: 'No active tab found' });
+function openVisualizerTab(sendResponse) {
+  console.log('Opening visualizer tab...');
+  
+  // Open the visualizer tab
+  chrome.tabs.create({ url: 'http://localhost:3000/' }, function(tab) {
+    if (chrome.runtime.lastError) {
+      console.error('Error opening visualizer tab:', chrome.runtime.lastError);
+      sendResponse({ success: false, error: chrome.runtime.lastError.message });
       return;
     }
     
-    activeTabId = tabs[0].id;
+    console.log('Successfully opened visualizer tab with ID:', tab.id);
+    visualizerTabId = tab.id;
     
-    // The issue is here - we need to check if chrome.tabCapture is available
-    if (!chrome.tabCapture) {
-      console.error('Tab capture API not available');
-      sendResponse({ 
-        success: false, 
-        error: 'Tab capture API not available. Make sure permissions are granted.' 
-      });
-      return;
-    }
-    
-    // Request tab capture permission
-    const constraints = {
-      audio: true,
-      video: false
-    };
-    
-    // Add proper error handling for the tab capture API
-    try {
-      // Capture the tab's audio
-      chrome.tabCapture.getMediaStreamId(
-        { targetTabId: activeTabId },
-        (streamId) => {
-          if (chrome.runtime.lastError) {
-            console.error('Error getting media stream ID:', chrome.runtime.lastError);
-            sendResponse({ 
-              success: false, 
-              error: chrome.runtime.lastError.message 
-            });
-            return;
-          }
-          
-          // We've got the stream ID, now we need to create a media stream
-          // This needs to be done in the context of a tab via scripting.executeScript
-          chrome.scripting.executeScript({
-            target: { tabId: activeTabId },
-            func: (streamId) => {
-              navigator.mediaDevices.getUserMedia({
-                audio: {
-                  mandatory: {
-                    chromeMediaSource: 'tab',
-                    chromeMediaSourceId: streamId
-                  }
-                },
-                video: false
-              })
-              .then(stream => {
-                window.darnvizStream = stream;
-                window.postMessage({ type: 'DARNVIZ_STREAM_READY' }, '*');
-              })
-              .catch(err => {
-                console.error('Error creating stream:', err);
-                window.postMessage({ 
-                  type: 'DARNVIZ_STREAM_ERROR', 
-                  error: err.message 
-                }, '*');
-              });
-            },
-            args: [streamId]
-          }).then((injectionResults) => {
-            if (!injectionResults || injectionResults.length === 0) {
-              console.error('Script execution failed');
-              sendResponse({ 
-                success: false, 
-                error: 'Script execution failed' 
-              });
-              return;
-            }
-            
-            // Set status flag
-            isCapturing = true;
-            
-            // Send success response
-            sendResponse({ 
-              success: true, 
-              tabId: activeTabId 
-            });
-            
-            // Send update to any connected web app
-            broadcastCaptureStatus();
-          }).catch(error => {
-            console.error('Error executing script:', error);
-            sendResponse({ 
-              success: false, 
-              error: error.message || 'Failed to execute script' 
-            });
-          });
-        }
-      );
-    } catch (error) {
-      console.error('Error during tab capture:', error);
-      sendResponse({ 
-        success: false, 
-        error: error.message || 'Failed to capture tab audio' 
-      });
-    }
-  } catch (error) {
-    console.error('Error in startAudioCapture:', error);
-    sendResponse({ 
-      success: false, 
-      error: error.message 
+    // Store the tab ID for reference
+    chrome.storage.local.set({ visualizerTabId: tab.id }, function() {
+      console.log('Stored visualizer tab ID:', tab.id);
+      
+      // If we aren't capturing yet, start demo capture
+      if (!isCapturing) {
+        console.log('Starting demo capture for new visualizer tab');
+        startDemoAudioCapture();
+      }
+      
+      sendResponse({ success: true, tabId: tab.id });
     });
-  }
+  });
 }
 
 /**
- * Set up audio processing for the captured stream
- * @param {MediaStream} stream - The captured audio stream
+ * Start demo audio capture with synthetic data
  */
-function setupAudioProcessing(stream) {
-  // Create audio context
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+function startDemoAudioCapture(sendResponse) {
+  console.log('Starting demo audio capture...');
   
-  // Create analyser node
-  analyser = audioContext.createAnalyser();
-  analyser.fftSize = 2048;
-  analyser.smoothingTimeConstant = 0.8;
+  // Set status flags
+  demoMode = true;
+  isCapturing = true;
   
-  // Create source from stream
-  const source = audioContext.createMediaStreamSource(stream);
+  // Start sending audio data to the visualizer tab
+  startAudioDataInterval();
   
-  // Connect source to analyser
-  source.connect(analyser);
+  // Send success response if callback provided
+  if (sendResponse) {
+    sendResponse({ 
+      success: true, 
+      demoMode: true 
+    });
+  }
   
-  console.log('Audio processing set up successfully');
+  // Broadcast status change
+  broadcastCaptureStatus();
+  
+  return true;
+}
+
+/**
+ * Start sending synthetic audio data at regular intervals
+ */
+function startAudioDataInterval() {
+  // Clear any existing interval
+  if (dataInterval) {
+    clearInterval(dataInterval);
+  }
+  
+  console.log('Starting synthetic audio data generation...');
+  
+  // Set interval to broadcast audio data every 50ms
+  dataInterval = setInterval(() => {
+    try {
+      if (isCapturing) {
+        // Get the visualizer tab ID from storage or use the stored variable
+        chrome.storage.local.get(['visualizerTabId'], function(result) {
+          const receiverTabId = result.visualizerTabId || visualizerTabId;
+          
+          if (receiverTabId) {
+            // Log the sending process occasionally
+            if (Date.now() % 3000 < 50) { // Every ~3 seconds
+              console.log(`Sending synthetic audio data to visualizer tab ${receiverTabId}`);
+            }
+            
+            // Create synthetic waveform data (time domain)
+            const now = Date.now() / 1000; // Convert to seconds
+            const frequency = 2; // 2 Hz
+            const amplitude = 50; // Amplitude of the wave
+            const baseValue = 128; // Center value (128 for unsigned 8-bit)
+            
+            // Create time domain data (sine wave)
+            const timeData = new Array(128);
+            for (let i = 0; i < timeData.length; i++) {
+              const t = i / timeData.length;
+              // Multiple sine waves at different frequencies for more interesting waveform
+              timeData[i] = Math.floor(
+                baseValue + 
+                amplitude * Math.sin(2 * Math.PI * (t * 1 + now * frequency)) +
+                amplitude/3 * Math.sin(2 * Math.PI * (t * 3 + now * frequency * 1.1)) +
+                amplitude/5 * Math.sin(2 * Math.PI * (t * 5 + now * frequency * 0.9))
+              );
+            }
+            
+            // Create frequency domain data (spectrum)
+            const frequencyData = new Array(64);
+            for (let i = 0; i < frequencyData.length; i++) {
+              // More bass-heavy spectrum (higher values for lower frequencies)
+              const bassFactor = Math.pow(1 - i/frequencyData.length, 2); // Higher for lower indices
+              
+              // Base spectrum shape (falloff from low to high frequencies)
+              let value = 200 * bassFactor;
+              
+              // Add some temporal variation based on time
+              const variation = Math.sin(now * 2 + i/10) * 20 * bassFactor;
+              value += variation;
+              
+              // Add some randomness
+              value += (Math.random() * 30 - 15) * bassFactor;
+              
+              // Ensure value is within valid range (0-255)
+              frequencyData[i] = Math.max(0, Math.min(255, Math.floor(value)));
+            }
+            
+            // Send to the visualizer tab
+            try {
+              chrome.tabs.sendMessage(receiverTabId, {
+                type: 'DARNVIZ_AUDIO_DATA',
+                frequencyData: frequencyData,
+                timeData: timeData,
+                timestamp: Date.now()
+              }, function(response) {
+                if (chrome.runtime.lastError) {
+                  console.log(`Error sending to visualizer tab ${receiverTabId}:`, chrome.runtime.lastError);
+                  
+                  // Check if the tab still exists
+                  chrome.tabs.get(receiverTabId, function() {
+                    if (chrome.runtime.lastError) {
+                      console.log('Visualizer tab no longer exists, stopping data transmission');
+                      stopAudioCapture();
+                    }
+                  });
+                }
+              });
+            } catch (err) {
+              console.log(`Error sending audio data to tab ${receiverTabId}:`, err);
+            }
+          } else {
+            console.log('No visualizer tab ID available, stopping data generation');
+            stopAudioCapture();
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error in audio data interval:', error);
+    }
+  }, 50); // 50ms = ~20fps
 }
 
 /**
@@ -183,118 +233,37 @@ function setupAudioProcessing(stream) {
 function stopAudioCapture() {
   console.log('Stopping audio capture...');
   
-  // If we have an active tab, send a message to stop the stream
-  if (activeTabId) {
-    try {
-      // Execute script in the tab to clean up resources
-      chrome.scripting.executeScript({
-        target: { tabId: activeTabId },
-        func: () => {
-          // Stop the stream tracks
-          if (window.darnvizStream) {
-            window.darnvizStream.getTracks().forEach(track => track.stop());
-            window.darnvizStream = null;
-          }
-          
-          // Close audio context
-          if (window.darnvizAudioContext && window.darnvizAudioContext.state !== 'closed') {
-            window.darnvizAudioContext.close();
-            window.darnvizAudioContext = null;
-          }
-          
-          // Clear analyser
-          window.darnvizAnalyser = null;
-          
-          console.log('Audio capture resources cleaned up');
-          return true;
-        }
-      }).then(results => {
-        console.log('Cleanup script executed successfully', results);
-      }).catch(error => {
-        console.error('Error executing cleanup script:', error);
-      });
-    } catch (error) {
-      console.error('Error cleaning up resources:', error);
-    }
+  // Stop audio data interval
+  if (dataInterval) {
+    clearInterval(dataInterval);
+    dataInterval = null;
   }
   
-  // Stop any active streams in background context
-  if (captureStream) {
-    captureStream.getTracks().forEach(track => track.stop());
-    captureStream = null;
-  }
-  
-  // Close audio context in background context
-  if (audioContext && audioContext.state !== 'closed') {
-    audioContext.close();
-    audioContext = null;
-  }
-  
-  // Clear analyser in background context
-  analyser = null;
-  
-  // Reset tab ID
-  activeTabId = null;
-  
-  // Set status flag
+  // Reset flags
   isCapturing = false;
   
   // Send update to any connected web app
   broadcastCaptureStatus();
-}
-
-/**
- * Get audio data from the analyser and send it to the requester
- * @param {function} sendResponse - Callback function to send response to sender
- */
-function sendAudioData(sendResponse) {
-  if (!isCapturing || !analyser) {
-    sendResponse({ 
-      success: false, 
-      error: 'Not capturing audio' 
-    });
-    return;
-  }
   
-  try {
-    // Get frequency data
-    const frequencyData = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(frequencyData);
-    
-    // Get time domain data
-    const timeData = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteTimeDomainData(timeData);
-    
-    // Send the data
-    sendResponse({
-      success: true,
-      frequencyData: Array.from(frequencyData),
-      timeData: Array.from(timeData),
-      timestamp: Date.now()
-    });
-  } catch (error) {
-    console.error('Error getting audio data:', error);
-    sendResponse({ 
-      success: false, 
-      error: error.message 
-    });
-  }
+  console.log('Audio capture stopped successfully');
 }
 
 /**
  * Broadcast capture status to connected tabs
  */
 function broadcastCaptureStatus() {
-  chrome.runtime.sendMessage({
-    type: 'CAPTURE_STATUS_CHANGED',
-    isCapturing,
-    activeTabId
-  }).catch(error => {
-    // Ignore errors from no listeners
-    if (!error.message.includes('Could not establish connection')) {
-      console.error('Error broadcasting status:', error);
+  if (visualizerTabId) {
+    try {
+      chrome.tabs.sendMessage(visualizerTabId, {
+        type: 'DARNVIZ_CAPTURE_STATUS',
+        isCapturing: isCapturing,
+        demoMode: demoMode
+      });
+      console.log('Broadcast capture status to visualizer tab:', { isCapturing, demoMode });
+    } catch (error) {
+      console.error('Error sending capture status to visualizer tab:', error);
     }
-  });
+  }
 }
 
-console.log('DarnViz background script loaded (Phase 1)');
+console.log('DarnViz background script loaded (Phase 2) - Demo mode enabled');

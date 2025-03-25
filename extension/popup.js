@@ -1,5 +1,5 @@
 /**
- * DarnViz Extension Popup - Phase 1 Implementation
+ * DarnViz Extension Popup - Phase 2 Implementation
  * Manages the popup UI and interactions with the background script
  */
 document.addEventListener('DOMContentLoaded', function() {
@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Configuration
   const VISUALIZER_URL = 'http://localhost:3000'; // Change to actual URL when deployed
-  let activeTabId = null;
+  let isCapturing = false;
   
   // Initialize UI
   initializeUI();
@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Listen for status updates from background script
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'CAPTURE_STATUS_CHANGED') {
-      updateUI(message.isCapturing, message.activeTabId);
+      updateUI(message.isCapturing);
     }
   });
   
@@ -29,34 +29,41 @@ document.addEventListener('DOMContentLoaded', function() {
   startCaptureButton.addEventListener('click', async function() {
     startCaptureButton.disabled = true;
     statusText.textContent = 'Starting capture...';
+    console.log('Start Capture button clicked');
     
     try {
       const response = await sendMessage({ action: 'startCapture' });
       
       if (response && response.success) {
-        updateUI(true, response.tabId);
-        activeTabId = response.tabId;
+        updateUI(true);
+        isCapturing = true;
+        console.log('Capture started successfully', response);
       } else {
         // Handle error
         const errorMsg = response?.error || 'Unknown error';
         statusText.textContent = `Failed: ${errorMsg}`;
+        statusText.className = 'status-value error';
         startCaptureButton.disabled = false;
+        console.error('Failed to start capture:', errorMsg);
       }
     } catch (error) {
       console.error('Error starting capture:', error);
       statusText.textContent = `Error: ${error.message}`;
+      statusText.className = 'status-value error';
       startCaptureButton.disabled = false;
     }
   });
   
   // Stop capture button click handler
   stopCaptureButton.addEventListener('click', async function() {
+    console.log('Stop Capture button clicked');
     try {
       const response = await sendMessage({ action: 'stopCapture' });
       
       if (response && response.success) {
         updateUI(false);
-        activeTabId = null;
+        isCapturing = false;
+        console.log('Capture stopped successfully');
       }
     } catch (error) {
       console.error('Error stopping capture:', error);
@@ -67,21 +74,58 @@ document.addEventListener('DOMContentLoaded', function() {
   // Open visualizer link
   openVisualizerLink.addEventListener('click', function(e) {
     e.preventDefault();
-    chrome.tabs.create({ url: VISUALIZER_URL });
+    console.log('Open Visualizer link clicked');
+    
+    // Add visual feedback that we're doing something
+    const demoMessage = document.createElement('div');
+    demoMessage.className = 'demo-message';
+    demoMessage.textContent = 'Opening visualizer...';
+    document.querySelector('.workflow-steps').appendChild(demoMessage);
+    
+    // Tell the background script to open the visualizer tab
+    chrome.runtime.sendMessage({ action: 'openVisualizer' }, function(response) {
+      if (chrome.runtime.lastError) {
+        console.error('Error opening visualizer:', chrome.runtime.lastError);
+        demoMessage.textContent = 'Error: ' + chrome.runtime.lastError.message;
+        demoMessage.style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
+        demoMessage.style.borderColor = '#ff0000';
+        return;
+      }
+      
+      console.log('Visualizer opened:', response);
+      
+      // Update message to show success
+      if (response && response.success) {
+        demoMessage.textContent = 'Visualizer opened successfully!';
+        
+        // Update UI to reflect that we're now capturing
+        updateUI(true);
+        isCapturing = true;
+      } else {
+        demoMessage.textContent = 'Error: ' + (response?.error || 'Failed to open visualizer');
+        demoMessage.style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
+        demoMessage.style.borderColor = '#ff0000';
+      }
+    });
   });
   
   // Helper function to initialize UI with current status
   async function initializeUI() {
     try {
       const response = await sendMessage({ action: 'getStatus' });
+      console.log('Status retrieved:', response);
       
       if (response) {
-        updateUI(response.isCapturing, response.activeTabId);
-        activeTabId = response.activeTabId;
+        updateUI(response.isCapturing);
+        isCapturing = response.isCapturing;
         
-        // If capturing, get tab info
-        if (response.isCapturing && response.activeTabId) {
-          updateCapturedTabInfo(response.activeTabId);
+        // Update step indicators
+        document.getElementById('step1').classList.add('active');
+        
+        if (response.isCapturing) {
+          document.getElementById('step1').classList.add('completed');
+          document.getElementById('step2').classList.add('completed');
+          document.getElementById('step3').classList.add('active');
         }
       }
     } catch (error) {
@@ -90,17 +134,17 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   // Helper function to update UI based on capture state
-  function updateUI(isCapturing, tabId = null) {
-    if (isCapturing) {
+  function updateUI(isActive) {
+    if (isActive) {
       startCaptureButton.disabled = true;
       stopCaptureButton.disabled = false;
       statusIndicator.classList.remove('status-inactive');
       statusIndicator.classList.add('status-active');
       statusText.textContent = 'Active - Capturing audio';
+      document.getElementById('step2').classList.add('completed');
       
-      if (tabId) {
-        updateCapturedTabInfo(tabId);
-      }
+      // Highlight step 3 if we're capturing
+      document.getElementById('step3').classList.add('active');
     } else {
       startCaptureButton.disabled = false;
       stopCaptureButton.disabled = true;
@@ -108,47 +152,10 @@ document.addEventListener('DOMContentLoaded', function() {
       statusIndicator.classList.add('status-inactive');
       statusText.textContent = 'Inactive';
       
-      if (capturedTabInfo) {
-        capturedTabInfo.textContent = '';
-      }
+      // Reset step indicators
+      document.getElementById('step2').classList.remove('completed');
+      document.getElementById('step3').classList.remove('active');
     }
-  }
-  
-  // Helper function to update captured tab information
-  async function updateCapturedTabInfo(tabId) {
-    if (!capturedTabInfo) return;
-    
-    try {
-      const tab = await getTabInfo(tabId);
-      
-      if (tab) {
-        const tabTitle = tab.title || 'Unknown tab';
-        capturedTabInfo.textContent = `Capturing: ${tabTitle}`;
-        capturedTabInfo.title = tabTitle; // For tooltip on hover
-        capturedTabInfo.style.display = 'block';
-      } else {
-        capturedTabInfo.textContent = 'Capturing audio';
-        capturedTabInfo.style.display = 'block';
-      }
-    } catch (error) {
-      console.error('Error getting tab info:', error);
-      capturedTabInfo.textContent = 'Capturing audio';
-      capturedTabInfo.style.display = 'block';
-    }
-  }
-  
-  // Helper function to get tab information
-  function getTabInfo(tabId) {
-    return new Promise((resolve) => {
-      chrome.tabs.get(tabId, (tab) => {
-        if (chrome.runtime.lastError) {
-          console.error(chrome.runtime.lastError);
-          resolve(null);
-        } else {
-          resolve(tab);
-        }
-      });
-    });
   }
   
   // Helper function to send messages to background script
@@ -164,6 +171,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // Diagnostic: Log extension info
-  console.log('DarnViz Extension Popup (Phase 1) initialized');
+  // Log initialization
+  console.log('DarnViz Extension Popup (Phase 2) initialized');
 });
